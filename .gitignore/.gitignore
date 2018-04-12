@@ -1,0 +1,76 @@
+import numpy as np
+import scipy.io
+import matplotlib.pyplot as plt
+
+doas = np.array([-30,-5,50])*np.pi/180.
+P=np.array([1,1,1])
+N=10;
+K=1024;
+d=0.5
+noise_var=1
+r=len(doas)
+
+A=np.exp(-1j*2*np.pi*d*np.arange(N)[None,:].T*np.sin(doas))
+sig = np.round(np.random.rand(r,K))*2-1
+noise = np.sqrt(noise_var/2.)*(np.random.randn(N,K)+np.random.randn(N,K))
+
+ret = scipy.io.loadmat("matfile1.mat")
+ret2 = scipy.io.loadmat("matfile2.mat")
+
+#sig=ret["sig"]
+#noise=ret["noise"]
+
+X=A.dot(np.diag(np.sqrt(P))).dot(sig)+noise
+Rxx = X.dot(X.conj().T)/K
+
+[D,Q] = np.linalg.eig(Rxx)
+I = np.argsort(-D)
+D = D[I]
+Q = Q[:,I]
+Qs = Q[:,:r]
+Qn = Q[:,r:N]
+
+angles=np.arange(-90,90.05,0.1)
+a1 = np.exp(-1j*2*np.pi*d*np.arange(N)[None,:].T*np.sin(angles*np.pi/180))
+
+music_spectrum=np.zeros(len(angles),dtype=complex)
+for k in np.arange(len(angles)):
+    music_spectrum[k] = (a1[:,k].conj().T).dot(a1[:,k])/  ( (((a1[:,k].conj().T).dot(Qn)).dot(Qn.conj().T)).dot(a1[:,k]) )
+
+ret_ = np.linalg.lstsq(Qs[:(N-1),:],Qs[1:N,:] ,rcond=-1)
+phi = ret_[0]
+ESPRIT_doas = np.arcsin(-np.angle( np.linalg.eig(phi)[0]  )/(2*np.pi*d))*180/np.pi 
+print ( ESPRIT_doas )
+#print (np.allclose(ESPRIT_doas, ret2["ESPRIT_doas"].ravel() ))
+
+IR = np.linalg.inv(Rxx)
+mvdr = np.zeros(len(angles),dtype=complex)
+for k in np.arange(len(angles)):
+    mvdr[k] = 1./( ((a1[:,k].conj().T).dot(IR)).dot(a1[:,k])) 
+#plt.plot(angles,np.abs(mvdr))
+#print ( np.allclose(mvdr,ret2["mvdr"] ) )
+
+alpha=Qs[0,:]; 
+Shat=Qs[1:N,:];
+ghat=-Shat.dot(alpha.conj().T)/(1-alpha.dot(alpha.conj().T));
+g=np.hstack([[1],ghat])[:,None];
+#print (np.allclose( g,ret2["g"]   ))
+minnorm_spectrum = np.zeros(len(angles))
+for k in np.arange(len(angles)):
+    minnorm_spectrum[k]=1./(np.abs(a1[:,k].conj().T.dot(g)));
+
+Classical =  np.zeros(len(angles),dtype=complex)
+for k in np.arange(len(angles)):
+    Classical[k]=(a1[:,k].conj().T.dot(Rxx)).dot(a1[:,k]);
+
+#print (np.allclose(minnorm_spectrum, ret2["minnorm_spectrum"]))
+#print (np.allclose(Classical,ret2["Classical"]))
+fig, ax = plt.subplots(2,2,figsize=(10,10))
+ax[0,0].plot(angles,np.abs(music_spectrum))
+ax[0,1].plot(angles,np.abs(mvdr))
+ax[1,0].plot(angles,minnorm_spectrum)
+ax[1,1].plot(angles,np.abs(Classical))
+plt.show()
+
+
+
